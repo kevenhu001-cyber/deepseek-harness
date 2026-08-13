@@ -1,0 +1,67 @@
+[package]
+name = "dsh-desktop"
+version = "0.1.0-rc.5"
+description = "Tauri 2.x desktop shell for DeepSeek Harness. Spawns the `dsh` Node host subprocess and embeds the built web frontend in a system WebView."
+authors = ["DeepSeek Harness Contributors"]
+license = "MIT"
+repository = "https://github.com/kevenhu001-cyber/deepseek-harness"
+edition = "2021"
+rust-version = "1.77"
+# Avoid embedding build metadata so a workspace check still fingerprints the
+# rebuilt artifact via Cargo.lock rather than environment-dependent values.
+publish = false
+
+[lib]
+# Three crate types: `staticlib`/`cdylib` for Tauri 2 mobile entry-points and
+# Windows resource compilation, `rlib` so the `bin` target can `use` the
+# shared run() function rather than re-exporting the entry point.
+name = "dsh_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Tauri 2 core: protocol-asset enables the `tauri://` custom protocol used to
+# load the webapp dist; tray-icon is required for the system-tray entry.
+tauri = { version = "2", features = [ "tray-icon"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-notification = "2"
+# `tauri-plugin-shell` is the supported way to spawn a sidecar binary from
+# inside a Tauri command; the Node host `dsh` is launched through it.
+tauri-plugin-shell = "2"
+tauri-plugin-os = "2"
+tauri-plugin-process = "2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["process", "io-util", "macros", "rt-multi-thread", "sync", "time", "net"] }
+# Health-probe the Node host: rustls-tls avoids the system OpenSSL dependency
+# that blocks reproducible Linux/AppImage builds.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# Loopback HTTP bridge for the directory chooser: the Node host cannot call
+# Tauri commands, so this service answers the picker-tauri consumer's POSTs.
+axum = { version = "0.7", features = ["json"] }
+
+# Resolve `dsh` in PATH (dev) or alongside the executable (production install).
+which = "6"
+anyhow = "1"
+thiserror = "1"
+log = "0.4"
+env_logger = "0.11"
+
+[features]
+# Tauri's default feature set keeps the WebView and IPC minimal; CI builds
+# enable the same defaults so no custom feature list is needed here.
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+# LTO + single codegen unit gives a smaller bundle at the cost of a longer
+# link; CI builds the release target only.
+lto = true
+codegen-units = 1
+opt-level = "s"
+panic = "abort"
+strip = true

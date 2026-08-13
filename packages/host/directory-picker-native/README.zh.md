@@ -6,6 +6,10 @@
 
 **双面包**：浏览器端（`./client`）向 [ui-workspace](../../client/ui-workspace/README.md) 的两个目录流 slot 注册一个无渲染的流程占用者——每次 `open` 请求驱动 `host.pickDirectory`，并通过 slot 的属主交互约定上报唯一结果（所选路径／取消／失败）。两个目录流程声明必须同时处于有效状态，任一贡献才会安装。因此一行 cordis.yml 同时组合原生交互的两侧；客户端不包含任何按能力类型进行的分支，挂载第二个流程包会在加载期失败（slot 的 kind 为 `single`）。
 
+## Tauri 桌面部署
+
+native 后端的 OS 进程模型假设 `dsh web` 进程拥有控制台附加的显示（或与启动它的进程在同一进程树中）。Tauri 桌面部署应改为组合 [`-tauri`](../directory-picker-tauri/README.md)——它把每个 `pick` 转发到正在运行的 [`dsh-desktop`](../../../../apps/desktop/README.md) Rust 外壳，由外壳调用 `tauri-plugin-dialog`，在 `osascript` / `IFileOpenDialog` / GTK portal 等同一 OS 对话框层级上打开。同时加载 `-native` 与 `-tauri` 会重复注册 `directoryPicker`，在激活时直接报错；桌面集成补丁（[`apps/desktop/scripts/before-build.mjs`](../../../../apps/desktop/scripts/before-build.mjs) 加 bundle 的 `cordis.patch.yml`）已经将 `-tauri` 钉为 Web 表面组合的行，因此直接运行 `pnpm run desktop:build` 不需要手动切换。
+
 ## 模型体验
 
 无。该后端服务于 GUI 宿主的目录选择；这里没有任何内容进入模型请求。

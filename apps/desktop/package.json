@@ -1,0 +1,33 @@
+{
+  "name": "@deepseek-ai/dsh-desktop",
+  "description": "Tauri 2.x desktop shell: spawns `dsh --profile web` as a Node host subprocess and embeds the built web frontend in a system WebView (Windows/macOS/Linux). The Tauri process adds native menu, tray, and IPC-only system capabilities on top of the unchanged Cordis plugin tree.",
+  "version": "0.1.0-rc.5",
+  "publishConfig": {
+    "access": "public"
+  },
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kevenhu001-cyber/deepseek-harness.git",
+    "directory": "apps/desktop"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm run sync:web && cargo tauri dev",
+    "build": "pnpm run before:build && pnpm run sync:web && cargo tauri build",
+    "build:debug": "pnpm run before:build && pnpm run sync:web && cargo tauri build --debug",
+    "sync:web": "node scripts/copy-web-dist.mjs",
+    "before:build": "node scripts/before-build.mjs",
+    "tsc": "tsc -p tsconfig.json",
+    "typecheck": "pnpm run tsc --emitDeclarationOnly false"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.1.1",
+    "@tauri-apps/plugin-dialog": "^2.0.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0",
+    "@types/node": "^22.20.0",
+    "typescript": "^6.0.3"
+  }
+}

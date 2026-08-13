@@ -1,0 +1,175 @@
+# Cross-platform Tauri desktop builds for apps/desktop. The Node host stays
+# identical across platforms; only the Rust bundle target and OS-specific
+# dependencies differ. The workflow gates on paths so PRs that don't touch
+# desktop code skip these heavier legs, while still re-running on every change
+# to apps/desktop, its companion Cordis patch, or the directory-picker-tauri
+# consumer. Kept independent of ci.yml so desktop failures show up next to the
+# Node matrix without adding to the all-checks-passed verdict — release builds
+# own desktop packaging.
+#
+# On a `v*` tag push, tauri-apps/tauri-action publishes a draft GitHub
+# Release whose body points installers at the per-platform artefacts. The
+# release stays draft until a maintainer promotes it; this prevents accidental
+# public artefacts while keeping the workflow self-contained.
+name: Desktop
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/desktop.yml'
+      - 'apps/desktop/**'
+      - 'packages/host/directory-picker-tauri/**'
+      - 'packages/bundle/web-app/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/desktop.yml'
+      - 'apps/desktop/**'
+      - 'packages/host/directory-picker-tauri/**'
+      - 'packages/bundle/web-app/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  PRIMARY_NODE_VERSION: '24'
+  # CI runs must never report to the production telemetry endpoint baked
+  # into apps/cli/cordis.yml (AppCLIEntry disables the row when set).
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  # Build Tauri artifacts on every supported desktop platform. Each leg
+  # produces a real platform bundle (.msi/.nsis on Windows, .app/.dmg on
+  # macOS, .deb/.AppImage on Linux) so reviewers catch platform regressions
+  # without spinning up the heavier Node CI matrix. The before:build script
+  # under apps/desktop owns the webapp dist copy and Rust icon generation;
+  # this workflow only owns Node deps, the Rust toolchain, and platform
+  # system libraries.
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            label: linux / ubuntu 22.04
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            label: macos / universal
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            label: windows / server 2022
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+
+      - name: Install (immutable)
+        run: pnpm install --frozen-lockfile
+
+      # Linux requires the WebKit/GTK runtime headers and librsvg for Tauri
+      # to bundle .deb/.AppImage; hosted Windows and macOS runners ship with
+      # the system WebView preinstalled and need no extra packages.
+      - name: Install Linux Tauri runtime dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      # Tauri-action owns the Rust toolchain install, target add, cargo
+      # registry cache, and the beforeBuildCommand lifecycle hook. The hook
+      # reruns apps/desktop's before:build script — regenerating icons,
+      # building webapp, and copying dist — before invoking `cargo tauri
+      # build`, so the workspace needs no extra wiring here.
+      #
+      # On tag pushes (refs/tags/v*), the placeholder strings are swapped
+      # for the real tag so tauri-action publishes a draft GitHub Release
+      # with every bundle artefact attached. PR and master-push runs keep
+      # the `__skip-*__` placeholders and skip release publishing.
+      - name: Resolve release metadata
+        id: release-meta
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == v* ]]; then
+            {
+              echo "tag_name=${GITHUB_REF_NAME}"
+              echo "release_name=DeepSeek Harness Desktop ${GITHUB_REF_NAME}"
+              {
+                echo "release_body<<EOF"
+                echo "DeepSeek Harness desktop installers for ${GITHUB_REF_NAME}."
+                echo
+                echo "## Install"
+                echo
+                echo "- **Windows**: download .msi for the system installer or .nsis.zip for a per-user install."
+                echo "- **macOS**: download .app.tar.gz (universal) or .dmg."
+                echo "- **Linux**: download .AppImage for a portable run, or .deb for Debian/Ubuntu installs."
+                echo
+                echo "See apps/desktop/README.md for prerequisites and the sidecar lifecycle, and docs/desktop.md for the architecture overview."
+                echo
+                echo "This is a draft release; a maintainer promotes it once the artefacts are signed off."
+                echo "EOF"
+              } >> "$GITHUB_OUTPUT"
+            } >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "tag_name=__skip-tag__"
+              echo "release_name=__skip-release__"
+              echo "release_body=__skip-body__"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/desktop
+          tagName: ${{ steps.release-meta.outputs.tag_name }}
+          releaseName: ${{ steps.release-meta.outputs.release_name }}
+          releaseBody: ${{ steps.release-meta.outputs.release_body }}
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.target == 'aarch64-apple-darwin' && '--target aarch64-apple-darwin' || '' }}
+
+      - name: Upload Tauri bundle artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-desktop-${{ matrix.target }}
+          path: |
+            apps/desktop/src-tauri/target/**/release/bundle/**/*.msi
+            apps/desktop/src-tauri/target/**/release/bundle/**/*.nsis.zip
+            apps/desktop/src-tauri/target/**/release/bundle/**/*.exe
+            apps/desktop/src-tauri/target/**/release/bundle/**/*.deb
+            apps/desktop/src-tauri/target/**/release/bundle/**/*.AppImage
+            apps/desktop/src-tauri/target/**/release/bundle/**/*.app
+            apps/desktop/src-tauri/target/**/release/bundle/**/*.dmg
+            apps/desktop/src-tauri/target/**/release/bundle/**/*.app.tar.gz
+          if-no-files-found: warn
+          retention-days: 7

@@ -84,11 +84,14 @@
     - id: session-stats
       name: '@deepseek-ai/dsh-session-stats'
 
-    # Resolve bind host, SSH launch, and display once at boot, then mount the
-    # matching dual-face directory picker. Mount -native or -browse directly in
-    # an overlay to pin the interaction.
+    # The directory-picker row: the Tauri-shell chooser forwards every `pick`
+    # to the running `dsh-desktop` Rust process, which opens the OS dialog
+    # through `tauri-plugin-dialog` without spawning a child process from the
+    # Node host. A browser-launched `dsh web` without the
+    # `DSH_DESKTOP_INTEGRATION` hint rejects with an actionable error rather
+    # than falling back to another backend.
     - id: directory-picker
-      name: '@deepseek-ai/dsh-host-directory-picker-auto'
+      name: '@deepseek-ai/dsh-host-directory-picker-tauri'
 
     # Read-only projection of current Loader entries for trusted client RPCs.
     - id: plugin-inventory

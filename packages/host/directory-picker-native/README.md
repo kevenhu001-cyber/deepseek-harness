@@ -6,6 +6,10 @@ The **native-OS-chooser backend** of the [directory-picker seam](../directory-pi
 
 **Dual-face package**: the browser half (`./client`) registers a renderless flow occupant into [ui-workspace's](../../client/ui-workspace/README.md) two directory-flow holes — each `open` request drives `host.pickDirectory` and reports the one outcome (picked path / cancel / failure) through the hole's owner conversation. Both directory-flow declarations must be live before either contribution installs. One cordis.yml row therefore composes both sides of the native interaction; the client carries no capability-kind branching, and mounting a second flow package fails at load (the holes are `single` kind).
 
+## Tauri desktop deployments
+
+The native backend's OS-process model assumes a `dsh web` process with a console-attached display (or the same process tree it was launched from). Tauri desktop deployments compose [`-tauri`](../directory-picker-tauri/README.md) instead — it forwards every `pick` to the running [`dsh-desktop`](../../../../apps/desktop/README.md) Rust shell, which calls `tauri-plugin-dialog` for the same OS dialog tier that hosts `osascript` / `IFileOpenDialog` / the GTK portal. A deployment loading both `-native` and `-tauri` is a duplicate `directoryPicker` registration and fails loud at activation; the desktop integration patch ([`apps/desktop/scripts/before-build.mjs`](../../../../apps/desktop/scripts/before-build.mjs) + the bundle's `cordis.patch.yml`) already pins `-tauri` as the row the Web surface composes, so a stock `pnpm run desktop:build` does not need a manual swap.
+
 ## Model Experience
 
 None, as the backend serves the GUI host's directory selection; nothing here reaches a model request.
