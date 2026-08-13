@@ -113,8 +113,7 @@ impl NodeHost {
         if let Ok(manifest) = std::env::var("CARGO_MANIFEST_DIR") {
             let root = PathBuf::from(manifest)
                 .parent()
-                .map(|p| p.parent())
-                .flatten()
+                .and_then(|p| p.parent())
                 .map(|p| p.to_path_buf());
             if let Some(root) = root {
                 #[cfg(windows)]

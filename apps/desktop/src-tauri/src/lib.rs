@@ -86,7 +86,7 @@ pub fn run() {
                                  {err}\n\n\
                                  See $DSH_HOME/logs/ for the host-side trace."
                             );
-                            let _ = window.eval(&format!(
+                            let _ = window.eval(format!(
                                 "document.body.innerText = {};",
                                 serde_json::to_string(&body)
                                     .unwrap_or_else(|_| "\"<encode error>\"".to_string())
@@ -109,7 +109,7 @@ pub fn run() {
                 let _ = window;
             }
         })
-        .menu(|app| menu::build(app))
+        .menu(menu::build)
         .invoke_handler(tauri::generate_handler![
             host::host_info,
             host::shutdown_host,
